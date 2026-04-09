@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "cordic"
+version = "0.1.0"
+description = "Iterative and Pipelined CORDIC implementation with RTL verification"
+authors = ["GGChe <ggche@users.noreply.github.com>"]
+license = "MIT"
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.12"
+numpy = "^2.4.0"
+scipy = "^1.16.0"
+cocotb = "^1.9.0"
+plotly = "^6.5.0"
+matplotlib = "^3.8.0"
+librelane = "^2.4.12"
+klayout = "0.30.6"
+
+[tool.poetry.group.dev.dependencies]
+# Useful but optional
+pytest = "^8.0"
+
+[build-system]
+requires = ["poetry-core>=1.8.0"]
+build-backend = "poetry.core.masonry.api"
