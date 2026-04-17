@@ -39,8 +39,23 @@ librelane:  ## Run full LibreLane flow
 
 # Run Verilog testbench (Icarus Verilog)
 test-verilog:  ## Run Verilog testbench (Icarus Verilog)
-	iverilog -g2005-sv -o sim_rtl.out $(VERILOG_SOURCES) $(PWD)/tb/verilog/tb_cordic.v
+	iverilog -g2005-sv -o sim_rtl.out $(PWD)/src/atan_lut.v $(VERILOG_SOURCES) $(PWD)/tb/verilog/tb_cordic.v
 	vvp sim_rtl.out
+
+# Run Verilog sqrt testbench (Icarus Verilog)
+test-verilog-sqrt:  ## Run Verilog sqrt testbench (Icarus Verilog)
+	iverilog -g2005-sv -o sim_sqrt.out $(PWD)/src/atanh_lut.v $(PWD)/src/cordic_sqrt.v $(PWD)/tb/verilog/tb_cordic_sqrt.v
+	vvp sim_sqrt.out
+
+# Run Verilog top-level testbench (Icarus Verilog)
+test-verilog-top:  ## Run Verilog top-level wrapper testbench (Icarus Verilog)
+	iverilog -g2005-sv -o sim_top.out $(PWD)/src/atan_lut.v $(VERILOG_SOURCES) $(PWD)/src/cordic_top.v $(PWD)/tb/verilog/tb_cordic.v
+	vvp sim_top.out
+
+# Run Verilog sqrt wrapper testbench (Icarus Verilog)
+test-verilog-wrapper:  ## Run Verilog sqrt wrapper testbench (Icarus Verilog)
+	iverilog -g2005-sv -o sim_wrapper.out $(PWD)/src/atanh_lut.v $(PWD)/src/cordic_sqrt.v $(PWD)/src/cordic_sqrt_wrapper.v $(PWD)/tb/verilog/tb_cordic_sqrt_wrapper.v
+	vvp sim_wrapper.out
 
 # View Cocotb waveforms
 view-cocotb:  ## View Cocotb waveforms
@@ -48,7 +63,19 @@ view-cocotb:  ## View Cocotb waveforms
 
 # View Verilog testbench waveforms
 view-verilog: test-verilog  ## View Verilog testbench waveforms
-	gtkwave -f tb/wave.gtkw
+	gtkwave tb/dump.vcd
+
+# View Verilog sqrt testbench waveforms
+view-verilog-sqrt: test-verilog-sqrt  ## View Verilog sqrt testbench waveforms
+	gtkwave tb/dump_sqrt.vcd
+
+# View Verilog top-level testbench waveforms
+view-verilog-top: test-verilog-top  ## View Verilog top-level wrapper testbench waveforms
+	gtkwave tb/dump.vcd
+
+# View Verilog wrapper testbench waveforms
+view-verilog-wrapper: test-verilog-wrapper  ## View Verilog sqrt wrapper testbench waveforms
+	gtkwave tb/dump_wrapper.vcd
 
 # View synthesized/routed model in OpenROAD
 view-openroad:  ## View synthesized/routed model in OpenROAD
