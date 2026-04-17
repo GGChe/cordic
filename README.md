@@ -1,41 +1,39 @@
 # CORDIC (COordinate Rotation DIgital Computer)
 
-CORDIC is a highly efficient hardware-oriented algorithm designed to compute complex mathematical functions using only fundamental **shift** and **add** operations. By completely eliminating the need for expensive hardware multipliers, it is especially well-suited for FPGA and ASIC hardware implementations where silicon area, power consumption, and clock speed are critical constraints.
+CORDIC is a highly efficient hardware algorithm for calculating mathematical functions like sine, cosine, magnitude, phase, and square roots. It works by performing a series of simple micro-rotations using only **bit-shifts** and **additions**, completely avoiding the need for expensive hardware multipliers.
 
-## Core Principles
+## The Principle of Micro-Rotations
 
-The CORDIC algorithm operates on the principle of **successive micro-rotations**. By iteratively rotating a vector by a sequence of pre-defined, progressively decreasing angles, it can traverse to any desired angle or converge to a target magnitude. 
+The core concept relies on iteratively rotating a vector by pre-defined angles ($\alpha_i$) chosen specifically so that their tangent is a descending power of 2 (i.e., $\tan(\alpha_i) = 2^{-i}$). This mathematical trick simplifies the complex matrix rotation into simple shift arrays.
 
-The brilliant insight of CORDIC is that these pre-defined rotation angles ($\alpha_i$) are specifically chosen such that their tangent is a descending power of 2 (e.g., $\tan(\alpha_i) = 2^{-i}$). This specific mathematical choice allows the matrix rotation calculations to be simplified into hardware-friendly bit-shift and addition/subtraction steps, completely bypassing traditional complex multiplication.
+![Micro-rotations](resources/cordic_micro_rotations.png)
 
 ## Operating Modes
 
-The algorithm primarily operates in two distinct modes, depending on the variable driven to zero:
+The CORDIC algorithm generally operates in two fundamental modes depending on which internal variable it is attempting to drive to zero:
 
-1. **Rotation Mode**: The target angle ($Z$) is iteratively pushed towards zero. The sequence of micro-rotations is determined by the sign of the remaining angle. This mode is used to rotate an input vector by a predetermined angle, which is essential for calculating trigonometric functions like **Sine** and **Cosine**.
-2. **Vectoring Mode**: The vector's y-coordinate ($Y$) is iteratively driven to zero, effectively rotating the vector to align with the positive x-axis. The total angle accumulated from these rotations gives the original phase, and the final x-coordinate represents the magnitude. This is used for functions like **Arctangent** and calculating vector magnitude.
+### 1. Rotation Mode
+In Rotation Mode, the target angle ($Z$) is constantly driven towards zero. The sequence of micro-rotations is determined by the sign of the remaining angle. This mode is exceptionally useful for calculating trigonometric functions, most notably rotating a vector to compute **Sine** and **Cosine**.
 
-## Unified Coordinate Systems
+![Rotation Mode](resources/cordic_rotation_mode.png)
 
-A unified mathematical description of CORDIC introduces a system parameter $m$ to extend the algorithm beyond circular rotations:
+### 2. Vectoring Mode
+In Vectoring Mode, the vector's y-coordinate ($Y$) is iteratively driven to zero. This effectively rotates the vector until it aligns cleanly with the positive x-axis. The final accumulated angle represents the original phase mapping (used for **Arctangent**), and the accumulated x-coordinate represents the total vector magnitude.
 
-* **Circular ($m = 1$)**: For trigonometric functions ($\sin$, $\cos$, $\arctan$), phase, and magnitude (e.g., polar-to-rectangular / rectangular-to-polar coordinate conversions).
-* **Linear ($m = 0$)**: The trajectory is linear rather than curved. Used for basic multiplication and division.
-* **Hyperbolic ($m = -1$)**: The trajectory follows a hyperbolic curve. Used to compute hyperbolic functions ($\sinh$, $\cosh$, $\text{arctanh}$), natural logarithms, exponentials, and square roots.
+![Vectoring Mode](resources/cordic_vectoring_mode.png)
 
-## Hardware Architectures
+*(A supplementary overview of micro-rotation execution)*
+![Micro-rotation mode](resources/cordic_microrotation_mode.png)
 
-Implementations at the RTL level typically fall into two main architectural patterns:
+## Package Contents
 
-* **Word-Serial (Iterative)**: Uses a single shift-and-add hardware unit that loops its output back to its input, iterating $N$ times. It is exceptionally slow ($N$ clock cycles per result) but requires the absolute minimum logic area.
-* **Unrolled / Pipelined**: Cascades $N$ distinct processing stages, one for each micro-rotation. Each stage is hardwired for its specific bit-shift amount, avoiding programmable shifters. This architecture provides high throughput (one result per clock cycle) at the cost of a considerably larger silicon footprint.
+This repository contains robust, hardware-verified Verilog implementations of these varying CORDIC components:
 
-## Advanced Execution Concepts
+* **`src/cordic.v`**: Standard Circular CORDIC module (Rotation Mode) tailored for calculating $\sin(\theta)$ and $\cos(\theta)$.
+* **`src/cordic_sqrt.v`**: Specialized Hyperbolic CORDIC (Vectoring Mode) structured to calculate fractional square roots.
+* **`src/cordic_sqrt_wrapper.v`**: Advanced normalization wrapper for the square root core. It handles arbitrarily large 32-bit integers, shifting them automatically into the core's fixed-point domain (Q1.15) for safe calculation.
+* **`src/cordic_top.v`**: A top-level wrapper merging the circular CORDIC core seamlessly with its required Look-Up Tables into a single AXI-friendly IP block.
+* **`src/atan_lut.v` / `src/atanh_lut.v`**: Fixed-point combinational ROM structures storing the inverse tangent and hyperbolic inverse tangent rotation variables.
 
-To achieve higher performance and precision, modern advanced CORDIC processor designs often employ:
-* **Redundant Representation**: Employing carry-save or signed-digit arithmetic architectures to avoid slow ripple-carry propagation paths during standard additions.
-* **High Radix**: Implementing Radix-4 or Radix-8 structures to resolve and process multiple bits per iteration step, actively reducing the total number of required rotations (latency).
-* **Double / Repeated Rotation**: Often necessary in hyperbolic CORDIC ($m=-1$) where convergence is not guaranteed for specific iteration indices (like $i=4, 13, 40...$), requiring certain iterations to be repeated, or used to compensate for the inherent CORDIC scale factor variations without requiring post-multiplication.
-
-
-
+### Testing
+All primary logic modules are accompanied by fully self-checking Verilog testbenches located in `tb/verilog/`. You can conveniently run them utilizing the attached `Makefile` targets.
