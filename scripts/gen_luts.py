@@ -1,24 +1,15 @@
 #!/usr/bin/env python3
 """
-Generate the hard-coded master tables of src/atan_lut.v and src/atanh_lut.v.
+Generate the master tables of src/atan_lut.v and src/atanh_lut.v.
 
-Each LUT stores one high-precision master table (unsigned 64-bit, MASTER_FRAC
-fractional bits). The RTL derives the PHASE_WIDTH-bit entries from it with a
-round-to-nearest right shift, so no real-valued math is needed at elaboration:
+    atan_master[j]  = round(atan(2^-j) / pi * 2^MASTER_FRAC),  j = 0 .. N_MASTER-1
+    atanh_master[j] = round(atanh(2^-j) * 2^MASTER_FRAC),      j = 1 .. N_MASTER
 
-    atan_master[j]  = round( atan(2^-j) / pi * 2^MASTER_FRAC ),   j = 0 .. N_MASTER-1
-    atanh_master[j] = round( atanh(2^-j)      * 2^MASTER_FRAC ),  j = 1 .. N_MASTER
+computed with exact series in 100-digit decimal arithmetic. The RTL rounds
+them to PHASE_WIDTH bits with a shift; this script checks that this equals
+rounding the exact value, for every PHASE_WIDTH up to MAX_PHASE_WIDTH.
 
-Values are computed with exact series in 100-digit decimal arithmetic.
-
-The script also verifies that "round the master value to W bits" gives exactly
-the same result as rounding the true value to W bits (no double-rounding
-error) for every entry and every PHASE_WIDTH from 4 to MAX_PHASE_WIDTH.
-
-Usage:
-    python3 scripts/gen_luts.py           # print the generated Verilog
-    python3 scripts/gen_luts.py --write   # update the LUT files in place
-    python3 scripts/gen_luts.py --check   # exit 1 if the files are out of date
+    python3 scripts/gen_luts.py [--write | --check]
 """
 
 import argparse

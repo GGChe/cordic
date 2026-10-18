@@ -1,56 +1,17 @@
-`timescale 1ns / 1ps
+// ── tb_cordic ──
+// DUT: `cordic` + `atan_lut`, or `cordic_top` with -DTB_USE_TOP. Expected
+// values: K·rotate(x0, y0, z0) in real arithmetic, rounded and saturated.
+// Vectors: reference and edge angles, non-zero y0, saturation, a full-circle
+// sweep and random inputs, run back-to-back and then with random back-pressure.
+// A monitor checks the AXI-Stream rules, throughput (pass 0) and that the phase
+// channel stays silent with phase_output = 0. Parameters can be overridden
+// (-Ptb_cordic.inout_width=12 ...); test values are rescaled. $fatal on error.
+// =============================================================================
 
-// =============================================================================
-// Testbench: tb_cordic
-// Author: Gabriel Galeote Checa
-// Date: 2026
-// License: MIT
-// =============================================================================
-// Self-checking testbench for the circular CORDIC (rotation mode).
-//
-// DUT selection:
-//   default        → `cordic` core + `atan_lut` instantiated here
-//   +define+TB_USE_TOP (iverilog -DTB_USE_TOP) → `cordic_top` wrapper
-//
-// Expected outputs are computed with real arithmetic:
-//   x_out = K · (x0·cos(z0) − y0·sin(z0))
-//   y_out = K · (y0·cos(z0) + x0·sin(z0))
-// rounded and saturated to Q1.15.
-//
-// Test vectors:
-//   1. The 8 original reference angles (x0 = 1/K, y0 = 0)
-//   2. Edge angles: 0°, ±90°, −180°, ±179.9°, ±100°, 120°, 135°, 170°, −150°
-//   3. Non-zero y0 and saturating inputs
-//   4. Full-circle sweep in 3° steps
-//   5. Random vectors (x0, y0, z0)
-//
-// Every vector set is run twice:
-//   pass 0 — back-to-back inputs, tready always high (max throughput)
-//   pass 1 — random tvalid gaps and independent random tready per channel
-//
-// A protocol monitor checks the AXI-Stream rules on every cycle:
-//   - no slave channel is accepted unless all three are valid
-//   - master tvalid/tdata stay stable while tvalid && !tready
-//   - exactly one beat per channel per input (scoreboard by beat index)
-//   - pass 0 sustains one result every cordic_niter cycles
-//   - with phase_output = 0 the phase channel never raises tvalid
-//
-// All parameters can be overridden from the command line, e.g.
-//   iverilog -Ptb_cordic.inout_width=12 -Ptb_cordic.phase_width=14 ...
-// The Q1.15 test values are rescaled to inout_width.
-//
-// Fixed-Point Convention (defaults):
-//   inout_width = 16 → Q1.15 (1.0 = 32768)
-//   phase_width = 18 → pi = 2^17 = 131072
-//
-// Exits with $fatal on any failure so it can be used in CI.
-// =============================================================================
+`timescale 1ns / 1ps
 
 module tb_cordic();
 
-  // -------------------------------------------------------------------------
-  // Parameters
-  // -------------------------------------------------------------------------
   parameter inout_width       = 16;
   parameter phase_width       = 18;
   parameter cordic_niter      = 16;
@@ -68,9 +29,6 @@ module tb_cordic();
   localparam MAX_VECTORS = 512;
   localparam real PI = 3.14159265358979323846;
 
-  // -------------------------------------------------------------------------
-  // DUT signals
-  // -------------------------------------------------------------------------
   reg aclk, resetn;
 
   reg  signed [inout_width-1:0]  s_axis_x_tdata;
@@ -98,9 +56,7 @@ module tb_cordic();
   reg                            m_axis_phase_tready;
 
 `ifdef TB_USE_TOP
-  // -------------------------------------------------------------------------
-  // DUT: top-level wrapper (core + LUT)
-  // -------------------------------------------------------------------------
+  // ── DUT: top-level wrapper ──
   cordic_top #(
     .INOUT_WIDTH       (inout_width),
     .PHASE_WIDTH       (phase_width),
@@ -111,10 +67,7 @@ module tb_cordic();
     .PHASE_OUTPUT      (phase_output)
   ) dut (
 `else
-  // -------------------------------------------------------------------------
-  // Atan Look-Up Table — uses the atan_lut module (ROM), generated at the
-  // core's internal phase width
-  // -------------------------------------------------------------------------
+  // ── Atan Look-Up Table ──
   localparam LUT_WIDTH = phase_width + phase_guard_bits;
 
   wire [cordic_niter_width-1:0]  atan_lut_address;
@@ -129,9 +82,7 @@ module tb_cordic();
     .data    (atan_lut_data)
   );
 
-  // -------------------------------------------------------------------------
-  // DUT: bare core
-  // -------------------------------------------------------------------------
+  // ── DUT: bare core ──
   cordic #(
     .inout_width(inout_width),
     .phase_width(phase_width),
@@ -172,23 +123,14 @@ module tb_cordic();
     .m_axis_phase_tready(m_axis_phase_tready)
   );
 
-  // -------------------------------------------------------------------------
-  // Clock generation — 100 MHz (10 ns period)
-  // -------------------------------------------------------------------------
   initial aclk = 0;
   always #(CLK_PERIOD/2) aclk = ~aclk;
 
-  // -------------------------------------------------------------------------
-  // Waveform dump
-  // -------------------------------------------------------------------------
   initial begin
     $dumpfile("tb/dump.vcd");
     $dumpvars(0, tb_cordic);
   end
 
-  // -------------------------------------------------------------------------
-  // Test vector storage
-  // -------------------------------------------------------------------------
   integer vec_x   [0:MAX_VECTORS-1];
   integer vec_y   [0:MAX_VECTORS-1];
   integer vec_z   [0:MAX_VECTORS-1];
@@ -254,9 +196,7 @@ module tb_cordic();
     end
   endtask
 
-  // -------------------------------------------------------------------------
-  // Master-side ready generator (random back-pressure in pass 1)
-  // -------------------------------------------------------------------------
+  // ── Master-side ready generator ──
   always @(posedge aclk) begin
     if (backpressure) begin
       m_axis_x_tready     <= ($random(seed) & 3) != 0;
@@ -269,9 +209,7 @@ module tb_cordic();
     end
   end
 
-  // -------------------------------------------------------------------------
-  // Protocol monitor + scoreboard
-  // -------------------------------------------------------------------------
+  // ── Protocol monitor + scoreboard ──
   integer beats_x, beats_y, beats_phase;
   integer n_phase_expected;          // n_vectors, or 0 if phase_output = 0
   integer last_fire_time;            // time of the previous input handshake (−1: none)
@@ -380,9 +318,7 @@ module tb_cordic();
     end
   end
 
-  // -------------------------------------------------------------------------
-  // Stimulus driver
-  // -------------------------------------------------------------------------
+  // ── Stimulus driver ──
   task run_pass;
     input pass_backpressure;
     integer i, timeout;
@@ -454,9 +390,6 @@ module tb_cordic();
     end
   endtask
 
-  // -------------------------------------------------------------------------
-  // Main test sequence
-  // -------------------------------------------------------------------------
   integer i;
   real    ang;
 
@@ -521,7 +454,6 @@ module tb_cordic();
       add_vector(q15($random(seed) % 13000), q15($random(seed) % 13000),
                  (($random(seed) % 18000) / 100.0));
 
-    // Initialize
     resetn = 0;
     s_axis_x_tdata      = 0;
     s_axis_y_tdata      = 0;
@@ -533,7 +465,6 @@ module tb_cordic();
     m_axis_y_tready     = 1;
     m_axis_phase_tready = 1;
 
-    // Reset
     repeat (4) @(posedge aclk);
     resetn <= 1;
     repeat (2) @(posedge aclk);
@@ -561,9 +492,6 @@ module tb_cordic();
     $display("  Partial-valid check");
     partial_valid_check;
 
-    // -----------------------------------------------------------------
-    // Summary
-    // -----------------------------------------------------------------
     $display("============================================================");
     $display("  Max error: x=%0d, y=%0d LSB, residual phase=%0d LSB",
              max_x_err, max_y_err, max_phase_err);

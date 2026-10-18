@@ -1,15 +1,6 @@
-# =============================================================================
-# Cocotb Makefile
-# =============================================================================
-# Two top levels can be tested (one per invocation):
-#
-#   make                                   cordic_top (cordic + atan_lut), default
-#   make TOPLEVEL=cordic_sqrt_wrapper \
-#        MODULE=test_cordic_sqrt_wrapper   sqrt wrapper (atanh_lut + cordic_sqrt)
-#
-# Each top level builds in its own sim_build/<toplevel> directory and writes
-# its own results_<toplevel>.xml, so the two runs never clash.
-# =============================================================================
+# cocotb runs, one top level per invocation (separate sim_build/ and results):
+#   make                                                           cordic_top
+#   make TOPLEVEL=cordic_sqrt_wrapper MODULE=test_cordic_sqrt_wrapper
 
 SIM          ?= verilator
 TOPLEVEL_LANG = verilog
@@ -17,7 +8,6 @@ TOPLEVEL_LANG = verilog
 TOPLEVEL ?= cordic_top
 MODULE   ?= test_cordic
 
-# Directory containing RTL sources (two levels up from tb/cocotb/)
 CORDIC_DIR = $(shell cd ../.. && pwd)
 
 ifeq ($(TOPLEVEL),cordic_top)

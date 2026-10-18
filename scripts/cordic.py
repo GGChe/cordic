@@ -105,10 +105,7 @@ def cordic_divide(y_val, x_val, n_iter=24):
 
 def cordic_sqrt(val, n_iter=15):
     """ Computes sqrt(val) (Hyperbolic Vectoring) """
-    # Hyperbolic CORDIC only converges for inputs in a specific domain.
-    # For square root, the input `a` must satisfy certain conditions,
-    # typically a is scaled such that it falls into the convergence domain.
-    # We'll use a simple case here for demonstration.
+    # Converges for val in about (0.03, 2); callers scale into that range.
     
     # K factor for Hyperbolic (requires repeated iterations 4, 13)
     reps = [4, 13]
@@ -132,7 +129,6 @@ def calculate_std_dev(data):
     # Mean
     sum_data = 0.0
     for x in data:
-        # We could use cordic_divide here, but for simplicity of the example let's stick to true division for the mean
         sum_data += x
     mean = sum_data / n
     
@@ -145,9 +141,7 @@ def calculate_std_dev(data):
         
     variance = cordic_divide(sum_sq_diff, n - 1, n_iter=24)
     
-    # Standard Deviation (Sqrt)
-    # We must scale the variance into the convergence range of hyperbolic CORDIC (~[0.03, 2])
-    # The scaling uses properties of sqrt: sqrt(x * 4^k) = sqrt(x) * 2^k
+    # Scale into the convergence range: sqrt(x · 4^k) = sqrt(x) · 2^k
     scale_factor = 1.0
     scaled_var = variance
     

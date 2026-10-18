@@ -1,43 +1,13 @@
-`timescale 1ns / 1ps
+// =============================================================================
+// cordic_top — circular CORDIC core with its atan LUT
+// Author: Gabriel Galeote Checa, 2026 — License: MIT
+// =============================================================================
+// Self-contained rotation-mode CORDIC: `cordic` plus `atan_lut`, the LUT
+// generated at the core's internal phase width (PHASE_WIDTH + PHASE_GUARD_BITS).
+// Parameters and ports are those of `cordic` (see cordic.v).
+// =============================================================================
 
-// =============================================================================
-// Module: cordic_top
-// Author: Gabriel Galeote Checa
-// Date: 2026
-// License: MIT
-// =============================================================================
-// Top-level wrapper that integrates the CORDIC core with the atan LUT ROM.
-//
-// This module is the "complete" CORDIC unit — it is self-contained and can be
-// instantiated in a larger design without needing to externally provide
-// the atan look-up table.
-//
-// Architecture:
-//
-//   ┌─────────────────────────────────────────────────────┐
-//   │  cordic_top                                         │
-//   │                                                     │
-//   │   ┌──────────┐    address    ┌──────────┐           │
-//   │   │          ├──────────────►│          │           │
-//   │   │  cordic  │              │ atan_lut │           │
-//   │   │  (core)  │◄──────────────┤  (ROM)   │           │
-//   │   │          │     data      │          │           │
-//   │   └──────────┘               └──────────┘           │
-//   │                                                     │
-//   └─────────────────────────────────────────────────────┘
-//
-// Parameters:
-//   INOUT_WIDTH        — data path bit-width (default 16, Q1.15)
-//   PHASE_WIDTH        — phase bit-width at the ports (default 18, pi = 2^17)
-//   CORDIC_NITER       — number of CORDIC iterations (default 16, >= 2)
-//   CORDIC_NITER_WIDTH — ceil(log2(CORDIC_NITER)) (default 4)
-//   GUARD_BITS         — extra fractional bits on x / y (default 4)
-//   PHASE_GUARD_BITS   — extra fractional bits on the internal phase
-//                        (default 4); the atan LUT is generated at
-//                        PHASE_WIDTH + PHASE_GUARD_BITS bits (max 31)
-//   PHASE_OUTPUT       — 1: residual-phase master channel enabled (default)
-//                        0: channel disabled, m_axis_phase_tready ignored
-// =============================================================================
+`timescale 1ns / 1ps
 
 module cordic_top #(
   parameter INOUT_WIDTH        = 16,
@@ -51,7 +21,6 @@ module cordic_top #(
   input aclk,
   input resetn,
 
-  // AXIS Slave Interface (inputs)
   input  signed [INOUT_WIDTH-1:0]  s_axis_x_tdata,
   input                            s_axis_x_tvalid,
   output                           s_axis_x_tready,
@@ -64,7 +33,6 @@ module cordic_top #(
   input                            s_axis_phase_tvalid,
   output                           s_axis_phase_tready,
 
-  // AXIS Master Interface (outputs)
   output signed [INOUT_WIDTH-1:0]  m_axis_x_tdata,
   output                           m_axis_x_tvalid,
   input                            m_axis_x_tready,
@@ -78,17 +46,11 @@ module cordic_top #(
   input                            m_axis_phase_tready
 );
 
-  // -------------------------------------------------------------------------
-  // Internal wires connecting the CORDIC core to the atan LUT
-  // -------------------------------------------------------------------------
   localparam LUT_WIDTH = PHASE_WIDTH + PHASE_GUARD_BITS;
 
   wire [CORDIC_NITER_WIDTH-1:0]  lut_address;
   wire signed [LUT_WIDTH-1:0]    lut_data;
 
-  // -------------------------------------------------------------------------
-  // Atan Look-Up Table (combinational ROM)
-  // -------------------------------------------------------------------------
   atan_lut #(
     .PHASE_WIDTH (LUT_WIDTH),
     .N_ENTRIES   (CORDIC_NITER),
@@ -98,9 +60,6 @@ module cordic_top #(
     .data    (lut_data)
   );
 
-  // -------------------------------------------------------------------------
-  // CORDIC Core (iterative, word-serial architecture)
-  // -------------------------------------------------------------------------
   cordic #(
     .inout_width       (INOUT_WIDTH),
     .phase_width       (PHASE_WIDTH),
@@ -113,7 +72,6 @@ module cordic_top #(
     .aclk    (aclk),
     .resetn  (resetn),
 
-    // Slave interface
     .s_axis_x_tdata     (s_axis_x_tdata),
     .s_axis_x_tvalid    (s_axis_x_tvalid),
     .s_axis_x_tready    (s_axis_x_tready),
@@ -126,11 +84,9 @@ module cordic_top #(
     .s_axis_phase_tvalid(s_axis_phase_tvalid),
     .s_axis_phase_tready(s_axis_phase_tready),
 
-    // LUT interface (internal connection)
     .atan_lut_address   (lut_address),
     .atan_lut_data      (lut_data),
 
-    // Master interface
     .m_axis_x_tdata     (m_axis_x_tdata),
     .m_axis_x_tvalid    (m_axis_x_tvalid),
     .m_axis_x_tready    (m_axis_x_tready),

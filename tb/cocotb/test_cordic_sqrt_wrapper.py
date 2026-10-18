@@ -1,17 +1,6 @@
-# =============================================================================
-# Cocotb Testbench: test_cordic_sqrt_wrapper
-# =============================================================================
-# Tests the cordic_sqrt_wrapper module (32-bit unsigned integer → Q16.16
-# square root, hyperbolic CORDIC core + normalisation + output register):
-#   1. test_sqrt_directed      — small integers, perfect squares, every
-#                                2^k − 1 / 2^k / 2^k + 1, top of the range
-#   2. test_sqrt_random_stream — random 32-bit values streamed with random
-#                                input gaps and random output back-pressure,
-#                                checked by a protocol monitor + scoreboard
-#
-# Expected value: round(√rad · 2^16), computed exactly with integer math and
-# saturated to 0xFFFF_FFFF (√(2^32 − 1) rounds to 2^32).
-# =============================================================================
+# cocotb tests for cordic_sqrt_wrapper: directed values (every 2^k − 1 / 2^k /
+# 2^k + 1, top of the range) and a random stream with input gaps and output
+# back-pressure. Expected: round(√rad · 2^16) in exact integer math, saturated.
 
 import math
 import random

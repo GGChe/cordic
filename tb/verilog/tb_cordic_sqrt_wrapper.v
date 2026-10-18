@@ -1,25 +1,8 @@
-// =============================================================================
-// Testbench: tb_cordic_sqrt_wrapper
-// Author: Gabriel Galeote Checa
-// Date: 2026
-// License: MIT
-// =============================================================================
-// Self-checking testbench for the normalized integer square root wrapper.
-//
-//   root = round(√rad · 2^16)  (Q16.16), saturated to 0xFFFF_FFFF
-//
-// Test vectors:
-//   - small integers and perfect squares (0, 1, 2, 3, 4, 9, ..., 10000)
-//   - 2^k − 1, 2^k, 2^k + 1 for every k (exercises every normalization shift)
-//   - the top of the range (2^31 − 1, 0xFFFE0001, 0xFFFF_FFFF)
-//   - random 32-bit values
-//
-// The set is run twice: back-to-back with output_ready always high, then
-// with random input gaps and random output back-pressure. A monitor checks
-// that the output stays stable while stalled and that exactly one result is
-// produced per input.
-//
-// Exits with $fatal on any failure so it can be used in CI.
+// ── tb_cordic_sqrt_wrapper ──
+// Expected: round(√rad · 2^16), saturated to 0xFFFF_FFFF. Vectors: small
+// values, 2^k − 1 / 2^k / 2^k + 1 for every k, the top of the range and random
+// values, run back-to-back and then with random back-pressure; a monitor checks
+// output stability and one result per input. $fatal on error.
 // =============================================================================
 
 `timescale 1ns / 1ps
@@ -31,7 +14,6 @@ module tb_cordic_sqrt_wrapper;
 
   localparam MAX_VECTORS = 512;
 
-  // ── DUT signals ──
   reg          clk;
   reg          resetn;
   reg  [31:0]  rad;
@@ -41,7 +23,6 @@ module tb_cordic_sqrt_wrapper;
   wire         output_valid;
   reg          output_ready;
 
-  // ── DUT Instantiation ──
   cordic_sqrt_wrapper dut (
     .clk          (clk),
     .resetn       (resetn),
@@ -53,17 +34,14 @@ module tb_cordic_sqrt_wrapper;
     .output_ready (output_ready)
   );
 
-  // ── Clock generation ──
   initial clk = 0;
   always #5 clk = ~clk;
 
-  // ── Waveform dump ──
   initial begin
     $dumpfile("tb/dump_wrapper.vcd");
     $dumpvars(0, tb_cordic_sqrt_wrapper);
   end
 
-  // ── Test infrastructure ──
   reg [31:0] vec_rad  [0:MAX_VECTORS-1];
   reg [31:0] exp_root [0:MAX_VECTORS-1];
   integer    n_vectors;
@@ -158,7 +136,6 @@ module tb_cordic_sqrt_wrapper;
     end
   endtask
 
-  // ── Main test sequence ──
   integer i;
 
   initial begin

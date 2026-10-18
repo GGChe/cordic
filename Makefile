@@ -1,6 +1,4 @@
-# ============================================================
-# CORDIC — simulation, lint and synthesis targets
-# ============================================================
+# CORDIC — simulation, lint and synthesis. `make help` lists the targets.
 
 SIM ?= verilator
 
@@ -31,26 +29,25 @@ P_SQRT_W = -Ptb_cordic_sqrt.data_width=24 -Ptb_cordic_sqrt.phase_width=26 \
 
 .PHONY: help test test-verilog test-verilog-top test-verilog-nophase test-verilog-sqrt \
         test-verilog-wrapper test-params test-all test-cocotb test-cocotb-top \
-        test-cocotb-sqrt lint luts check-luts synth view-cocotb view-verilog view-verilog-sqrt \
+        test-cocotb-sqrt test-axi redpitaya lint luts check-luts synth view-cocotb view-verilog view-verilog-sqrt \
         view-verilog-top view-verilog-wrapper clean setup setup-all strip-notebook \
         librelane view-openroad
 
-# Help target: lists all targets with descriptions (marked with #)
 help:  ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
-# Install dependencies
 setup:  ## Install core dependencies (simulation / cocotb)
 	poetry install
 
 setup-all:  ## Install everything, including notebook and LibreLane groups
 	poetry install --with notebook,pnr
 
-# ------------------------------------------------------------
-# Verilog testbenches (Icarus Verilog)
+# ── Verilog testbenches (Icarus Verilog) ──
 # Each testbench calls $fatal on failure, so vvp exits non-zero.
-# ------------------------------------------------------------
-test: test-verilog test-verilog-top test-verilog-nophase test-verilog-sqrt test-verilog-wrapper  ## Run all Verilog testbenches (default parameters)
+test: test-verilog test-verilog-top test-verilog-nophase test-verilog-sqrt test-verilog-wrapper test-axi  ## Run all Verilog testbenches (default parameters)
+
+test-axi:  ## Run the Red Pitaya AXI4-Lite register interface testbench
+	$(MAKE) -C fpga/redpitaya sim
 
 test-all: test test-params test-cocotb  ## Run every testbench: Verilog, parameter sweep and cocotb
 
@@ -82,9 +79,7 @@ test-params:  ## Run the testbenches with non-default widths / iteration counts
 	$(IVERILOG) $(P_SQRT_W) -o sim_sqrt_wide.out $(SQRT_SRCS) tb/verilog/tb_cordic_sqrt.v
 	$(VVP) sim_sqrt_wide.out
 
-# ------------------------------------------------------------
-# Cocotb testbenches (Verilator by default)
-# ------------------------------------------------------------
+# ── Cocotb testbenches (Verilator by default) ──
 test-cocotb: test-cocotb-top test-cocotb-sqrt  ## Run all cocotb testbenches
 
 test-cocotb-top:  ## Run cocotb testbench on cordic_top
@@ -93,13 +88,15 @@ test-cocotb-top:  ## Run cocotb testbench on cordic_top
 test-cocotb-sqrt:  ## Run cocotb testbench on cordic_sqrt_wrapper
 	cd tb/cocotb && poetry run $(MAKE) SIM=$(SIM) TOPLEVEL=cordic_sqrt_wrapper MODULE=test_cordic_sqrt_wrapper
 
-# ------------------------------------------------------------
-# Static checks
-# ------------------------------------------------------------
+# ── Static checks ──
 lint: check-luts  ## Lint all RTL with Verilator -Wall (and check the LUT tables)
 	$(VERILATOR) --top-module cordic_top $(TOP_SRCS)
 	$(VERILATOR) --top-module cordic_top -GPHASE_OUTPUT=0 $(TOP_SRCS)
 	$(VERILATOR) --top-module cordic_sqrt_wrapper $(WRAPPER_SRCS)
+	$(MAKE) -C fpga/redpitaya lint
+
+redpitaya:  ## Build the Red Pitaya bitstream (see fpga/redpitaya/README.md)
+	$(MAKE) -C fpga/redpitaya build
 
 luts:  ## Regenerate the hard-coded LUT master tables (scripts/gen_luts.py)
 	python3 scripts/gen_luts.py --write
@@ -111,9 +108,7 @@ synth:  ## Quick generic Yosys synthesis of both tops (cell count report)
 	$(YOSYS) -p "read_verilog -sv $(TOP_SRCS); hierarchy -check -top cordic_top; synth -flatten -top cordic_top; tee -o /dev/stdout stat"
 	$(YOSYS) -p "read_verilog -sv $(WRAPPER_SRCS); hierarchy -check -top cordic_sqrt_wrapper; synth -flatten -top cordic_sqrt_wrapper; tee -o /dev/stdout stat"
 
-# ------------------------------------------------------------
-# Waveforms
-# ------------------------------------------------------------
+# ── Waveforms ──
 view-cocotb:  ## View Cocotb waveforms (last cocotb run)
 	gtkwave tb/cocotb/dump.fst
 
@@ -129,15 +124,11 @@ view-verilog-top: test-verilog-top  ## View Verilog top-level wrapper testbench 
 view-verilog-wrapper: test-verilog-wrapper  ## View Verilog sqrt wrapper testbench waveforms
 	gtkwave tb/dump_wrapper.vcd
 
-# ------------------------------------------------------------
-# Notebook hygiene
-# ------------------------------------------------------------
+# ── Notebook hygiene ──
 strip-notebook:  ## Remove outputs from the notebook before committing (needs: make setup-all)
 	poetry run nbstripout notebooks/*.ipynb
 
-# ------------------------------------------------------------
-# Physical design (LibreLane) — requires a librelane/ configuration
-# ------------------------------------------------------------
+# ── Physical design (LibreLane) — requires a librelane/ configuration ──
 librelane:  ## Run full LibreLane flow (needs librelane/run_librelane.py)
 	@if [ ! -f librelane/run_librelane.py ]; then \
 		echo "librelane/run_librelane.py not found — add a LibreLane configuration first."; \

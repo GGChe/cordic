@@ -1,40 +1,18 @@
-`timescale 1ns / 1ps
+// =============================================================================
+// tb_cordic_sqrt — self-checking testbench for the hyperbolic √ core
+// Author: Gabriel Galeote Checa, 2026 — License: MIT
+// =============================================================================
+// Checks x = K_h·√a, y ≈ 0 and z = atanh(y0/x0) against real arithmetic, with
+// K_h from the RTL shift sequence. Vectors: a ∈ [0.03, 0.74] (reference points,
+// sweep, random), run back-to-back and then with random back-pressure; a
+// monitor checks output stability and one result per input. Parameters can be
+// overridden (-Ptb_cordic_sqrt.data_width=24 ...). $fatal on error.
+// =============================================================================
 
-// =============================================================================
-// Testbench: tb_cordic_sqrt
-// Author: Gabriel Galeote Checa
-// Date: 2026
-// License: MIT
-// =============================================================================
-// Self-checking testbench for the hyperbolic CORDIC square root core.
-//
-// For input value a, the module computes:
-//   x0 = a + 1/4,  y0 = a - 1/4,  z0 = 0
-//   → x_out ≈ K_h · √a          (K_h ≈ 0.8282)
-//   → y_out ≈ 0
-//   → z_out ≈ atanh(y0 / x0)    (Q2.(phase_width-2))
-//
-// Expected values use K_h computed from the same iteration sequence as the
-// RTL (j(i) = i + 1 − [i >= 4] − [i >= 14], i = 0 .. n_iterations-1).
-//
-// Test vectors: the 5 original reference points plus a sweep of
-// a ∈ [0.03, 0.74]. The set is run twice: back-to-back with output_ready
-// always high, then with random input gaps and random output back-pressure.
-// A monitor checks that the output stays stable while stalled and that
-// exactly one result is produced per input.
-//
-// Fixed-Point (defaults): Q1.15 (1.0 = 32768),  Phase: Q2.16 (1.0 = 65536)
-// Input range: a ∈ (0.03, 0.75)
-//
-// All parameters can be overridden from the command line, e.g.
-//   iverilog -Ptb_cordic_sqrt.data_width=24 -Ptb_cordic_sqrt.n_iterations=22 ...
-//
-// Exits with $fatal on any failure so it can be used in CI.
-// =============================================================================
+`timescale 1ns / 1ps
 
 module tb_cordic_sqrt;
 
-  // ── Parameters ──
   parameter data_width   = 16;
   parameter phase_width  = 18;
   parameter n_iterations = 16;
@@ -52,7 +30,6 @@ module tb_cordic_sqrt;
 
   localparam MAX_VECTORS = 128;
 
-  // ── DUT signals ──
   reg                             clk;
   reg                             resetn;
 
@@ -71,7 +48,6 @@ module tb_cordic_sqrt;
   wire                            output_valid;
   reg                             output_ready;
 
-  // ── Atanh LUT (ROM) ──
   atanh_lut #(
     .PHASE_WIDTH (phase_width),
     .N_ENTRIES   (LUT_ENTRIES),
@@ -81,7 +57,6 @@ module tb_cordic_sqrt;
     .data    (elementary_angle)
   );
 
-  // ── DUT Instantiation ──
   cordic_sqrt #(
     .data_width   (data_width),
     .phase_width  (phase_width),
@@ -105,17 +80,14 @@ module tb_cordic_sqrt;
     .output_ready      (output_ready)
   );
 
-  // ── Clock generation — 100 MHz ──
   initial clk = 0;
   always #5 clk = ~clk;
 
-  // ── Waveform dump ──
   initial begin
     $dumpfile("tb/dump_sqrt.vcd");
     $dumpvars(0, tb_cordic_sqrt);
   end
 
-  // ── Test infrastructure ──
   integer vec_a  [0:MAX_VECTORS-1];
   integer exp_x  [0:MAX_VECTORS-1];
   integer exp_z  [0:MAX_VECTORS-1];
@@ -239,7 +211,6 @@ module tb_cordic_sqrt;
     end
   endtask
 
-  // ── Main test sequence ──
   integer i;
 
   initial begin
@@ -270,7 +241,6 @@ module tb_cordic_sqrt;
     for (i = 0; i < 40; i = i + 1)
       add_real((1000 + ({$random(seed)} % 23500)) / 32768.0);
 
-    // Reset
     resetn       = 0;
     input_valid  = 0;
     output_ready = 1;
@@ -296,9 +266,6 @@ module tb_cordic_sqrt;
     $display("  Pass 1: random input gaps and output back-pressure");
     run_pass(1'b1);
 
-    // -----------------------------------------------------------------
-    // Summary
-    // -----------------------------------------------------------------
     $display("============================================================");
     $display("  Max error: x=%0d LSB, |y|=%0d LSB, z=%0d LSB", max_x_err, max_y_abs, max_z_err);
     if (error_count > 0) begin

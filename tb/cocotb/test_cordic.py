@@ -1,26 +1,7 @@
-# =============================================================================
-# Cocotb Testbench: test_cordic
-# =============================================================================
-# Tests the cordic_top module (cordic core + atan LUT) in circular rotation
-# mode:
-#   1. test_cordic_rotation      — the 8 reference angles of the Verilog tb
-#   2. test_cordic_edge_angles   — 0°, ±90°, ±180°, outer quadrants
-#   3. test_cordic_random_stream — random vectors streamed back-to-back with
-#                                  random tvalid gaps and independent random
-#                                  tready per output channel, checked by a
-#                                  protocol monitor + scoreboard
-#
-# Expected values: K · rotate(x0, y0, z0), rounded and saturated to Q1.15,
-# with K taken from the Python reference model (scripts/cordic.py).
-# The residual phase output (PHASE_OUTPUT = 1, the default) is checked too.
-#
-# Fixed-Point Convention:
-#   INOUT_WIDTH  = 16 → Q1.15 (1.0 = 32768)
-#   PHASE_WIDTH  = 18 → pi = 2^17 = 131072
-#
-# CORDIC Gain K(16 iter) = 1.646760, so 1/K = 0.607253
-# 1/K in Q1.15 = round(0.607253 * 32768) = 19898
-# =============================================================================
+# cocotb tests for cordic_top: reference angles, edge angles (0°, ±90°, ±180°,
+# outer quadrants) and a random stream with random tvalid gaps and per-channel
+# back-pressure, checked by a protocol monitor and a scoreboard. Expected:
+# K·rotate(x0, y0, z0), rounded and saturated, K from scripts/cordic.py.
 
 import math
 import os
@@ -101,7 +82,6 @@ async def reset_dut(dut):
     dut.m_axis_y_tready.value = 1
     dut.m_axis_phase_tready.value = 1
 
-    # Hold reset for a few cycles
     for _ in range(4):
         await RisingEdge(dut.aclk)
 
@@ -123,7 +103,6 @@ async def run_test(dut, x_in, y_in, phase_in, x_expected, y_expected, name):
       name        – descriptive label
     """
 
-    # ── Drive inputs ──
     await RisingEdge(dut.aclk)
     dut.s_axis_x_tdata.value     = to_unsigned(x_in, INOUT_WIDTH)
     dut.s_axis_y_tdata.value     = to_unsigned(y_in, INOUT_WIDTH)
@@ -132,7 +111,7 @@ async def run_test(dut, x_in, y_in, phase_in, x_expected, y_expected, name):
     dut.s_axis_y_tvalid.value     = 1
     dut.s_axis_phase_tvalid.value = 1
 
-    # ── Wait for slave handshake (data accepted at the next edge) ──
+    # Accepted at the next edge if tready is high now
     timeout = 100
     while True:
         await ReadOnly()
@@ -143,12 +122,10 @@ async def run_test(dut, x_in, y_in, phase_in, x_expected, y_expected, name):
         timeout -= 1
         assert timeout > 0, f"{name}: Timed out waiting for slave handshake"
 
-    # ── Deassert valid ──
     dut.s_axis_x_tvalid.value     = 0
     dut.s_axis_y_tvalid.value     = 0
     dut.s_axis_phase_tvalid.value = 0
 
-    # ── Wait for output valid ──
     timeout = 100
     while True:
         await ReadOnly()
@@ -158,16 +135,13 @@ async def run_test(dut, x_in, y_in, phase_in, x_expected, y_expected, name):
         timeout -= 1
         assert timeout > 0, f"{name}: Timed out waiting for output valid"
 
-    # ── Read & convert outputs ──
     x_out = to_signed(dut.m_axis_x_tdata.value, INOUT_WIDTH)
     y_out = to_signed(dut.m_axis_y_tdata.value, INOUT_WIDTH)
     z_res = to_signed(dut.m_axis_phase_tdata.value, PHASE_WIDTH)
 
-    # ── Error calculation ──
     x_err = abs(x_out - x_expected)
     y_err = abs(y_out - y_expected)
 
-    # ── Report ──
     dut._log.info("-" * 60)
     dut._log.info(f"  Test: {name}")
     dut._log.info(f"  Input : x={x_in:6d}, y={y_in:6d}, phase={phase_in:7d}")
@@ -175,7 +149,6 @@ async def run_test(dut, x_in, y_in, phase_in, x_expected, y_expected, name):
     dut._log.info(f"  Expect: x={x_expected:6d}, y={y_expected:6d}")
     dut._log.info(f"  Error : x={x_err:6d}, y={y_err:6d} (tolerance={TOLERANCE})")
 
-    # ── Assert ──
     assert x_err <= TOLERANCE, \
         f"{name}: x error {x_err} exceeds tolerance {TOLERANCE}"
     assert y_err <= TOLERANCE, \
@@ -196,10 +169,8 @@ async def run_test(dut, x_in, y_in, phase_in, x_expected, y_expected, name):
 async def test_cordic_rotation(dut):
     """Test CORDIC circular rotation mode with 8 angle test cases."""
 
-    # Start clock — 100 MHz (10 ns period)
     cocotb.start_soon(Clock(dut.aclk, 10, units="ns").start())
 
-    # Reset
     await reset_dut(dut)
 
     dut._log.info("=" * 60)
@@ -209,11 +180,8 @@ async def test_cordic_rotation(dut):
     dut._log.info(f"  1/K = {INV_K} (pre-scaled input)")
     dut._log.info("=" * 60)
 
-    # ── Test cases ───────────────────────────────────────────────
-    # The 8 reference angles of the Verilog testbench (tb_cordic.v).
-    # Phase = round(angle_deg / 180 * 2^17). Expected values include the
-    # 1/K quantisation of the pre-scaled input (K · 19898 ≈ 32767.2).
-    # ─────────────────────────────────────────────────────────────
+    # Reference angles of tb_cordic.v; expected values include the 1/K
+    # quantisation of the input (K · 19898 ≈ 32767.2).
     test_angles = [10, 15, 30, 45, 60, 75, -45, -60]
 
     pass_count = 0
@@ -284,7 +252,6 @@ async def test_cordic_random_stream(dut):
                       int(dut.s_axis_phase_tvalid.value)]
             if any(readies) and not (all(readies) and all(valids)):
                 errors.append(f"slave tready without all channels valid: {valids} {readies}")
-            # Master side
             for name, (valid, ready, data, width) in channels.items():
                 v, r, d = int(valid.value), int(ready.value), to_signed(data.value, width)
                 if stalled[name] is not None and (not v or d != stalled[name]):
@@ -296,7 +263,6 @@ async def test_cordic_random_stream(dut):
     cocotb.start_soon(ready_driver())
     cocotb.start_soon(monitor())
 
-    # Driver
     for x_in, y_in, phase_in in vectors:
         while rng.random() < 0.25:
             await RisingEdge(dut.aclk)
@@ -316,7 +282,6 @@ async def test_cordic_random_stream(dut):
         dut.s_axis_y_tvalid.value     = 0
         dut.s_axis_phase_tvalid.value = 0
 
-    # Drain
     for _ in range(2000):
         if all(len(received[n]) >= len(vectors) for n in channels):
             break

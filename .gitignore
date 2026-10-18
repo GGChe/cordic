@@ -39,3 +39,9 @@ tb/cocotb/sim_build/*
 Thumbs.db
 __pycache__/
 .venv/
+
+# Red Pitaya / Vivado build products
+fpga/redpitaya/build/
+fpga/redpitaya/out/
+fpga/redpitaya/.Xil/
+*.jou

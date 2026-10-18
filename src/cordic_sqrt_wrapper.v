@@ -1,33 +1,13 @@
 // =============================================================================
-// Module: cordic_sqrt_wrapper
-// Author: Gabriel Galeote Checa
-// Date: 2026
-// License: MIT
+// cordic_sqrt_wrapper — √x for 32-bit unsigned integers, Q16.16 result
+// Author: Gabriel Galeote Checa, 2026 — License: MIT
 // =============================================================================
-// Normalizes 32-bit unsigned integer inputs to compute square roots
-// using the fixed-point hyperbolic CORDIC core.
+// rad is normalised to a = rad·2^(−2e) ∈ [1/16, 1/4) (a lossless left shift
+// into the Q1.39 core, e = floor(msb/2) + 2), then √rad = √a·2^e. The 40-bit
+// `cordic_sqrt` core runs 18 iterations; a 5-stage pipeline multiplies by
+// 1/K_h, shifts by e, rounds to nearest and saturates (√(2^32−1) → 0xFFFF_FFFF).
 //
-// Algorithm:
-//   1. LZD (Leading Zero Detector) finds the MSB position m of `rad`.
-//   2. Pre-scaler: with e = floor(m/2) + 2, the input is mapped to
-//          a = rad · 2^(−2e)  ∈ [1/16, 1/4)
-//      which is inside the core's convergence range. The exponent is even,
-//      so  √rad = √a · 2^e  exactly. In the Q1.39 core format this is a
-//      pure LEFT shift by (35 − 2·floor(m/2)), so no input bits are lost.
-//   3. Passes x0 = a + ¼, y0 = a − ¼ to the `cordic_sqrt` core
-//      (40-bit datapath, 18 iterations: j = 1..16 with repeats at 4 and 13).
-//   4. Post-scaler multiplies the output by the inverse hyperbolic gain
-//      (1/K_h), shifts it by the exponent, rounds to nearest and saturates.
-//   5. The result is registered (one-entry output buffer), so `root` and
-//      `output_valid` come straight from flip-flops and the multiplier /
-//      shifter path ends at a register instead of at the output port.
-//
-// Input:  32-bit Unsigned Integer
-// Output: 32-bit Q16.16 Fixed Point, rounded to nearest
-//         (√(2^32 − 1) rounds to 2^32 and is saturated to 0xFFFF_FFFF)
-//
-// Latency: 1 (capture) + 18 (iterations) + 1 (output register) cycles to
-//          output_valid. Throughput: one result every 20 cycles.
+// Valid/ready handshake. Latency 1 + 18 + 5 cycles, one result every 20.
 // =============================================================================
 
 `timescale 1ns / 1ps
@@ -45,20 +25,16 @@ module cordic_sqrt_wrapper (
     input output_ready
 );
 
-    // ── Core configuration ──
     localparam CORE_WIDTH  = 40;          // Q1.39
     localparam PHASE_WIDTH = 18;
     localparam N_ITER      = 18;          // j = 1..16 + repeats at 4, 13
     localparam ITER_WIDTH  = 5;
     localparam LUT_ENTRIES = N_ITER - 2;  // j_max = 16
 
-    // 1/K_h for the 18-step sequence above, Q1.32:
-    //   K_h = Π sqrt(1 − 2^(−2j)) = 0.82815936096...
-    //   round(2^32 / K_h) = 5186160416
+    // round(2^32 / K_h), K_h = Π sqrt(1 − 2^(−2j)) over the 18-step sequence
     localparam [33:0] INV_KH = 34'd5186160416;
 
-    // 1. Leading Zero Detector (Find MSB)
-    // Only msb[4:1] is needed: the shift depends on floor(m/2).
+    // MSB position (only floor(msb/2) is used)
     /* verilator lint_off UNUSEDSIGNAL */
     reg [4:0] msb;
     /* verilator lint_on UNUSEDSIGNAL */
@@ -69,15 +45,13 @@ module cordic_sqrt_wrapper (
             if (rad[i]) msb = i[4:0];
     end
 
-    // 2. Pre-scale Shift
-    // MSB lands on bit 35 (m even) or bit 36 (m odd) of the Q1.39 word,
-    // i.e. a ∈ [2^-4, 2^-2). The shift is always odd and positive (5..35).
+    // Normalise: the MSB lands on bit 35 or 36, i.e. a ∈ [2^-4, 2^-2)
     wire [5:0] shift_amt = 6'd35 - {1'b0, msb[4:1], 1'b0};
 
     wire [CORE_WIDTH-1:0] a_norm = {{(CORE_WIDTH-32){1'b0}}, rad} << shift_amt;
     wire is_zero = (rad == 0);
 
-    // 3. Register post-scaling exponent e = floor(m/2) + 2
+    // Exponent e, captured with the input
     wire [4:0] e_comb = {1'b0, msb[4:1]} + 5'd2;
     reg  [4:0] e_reg;
     reg        is_zero_reg;
@@ -95,12 +69,14 @@ module cordic_sqrt_wrapper (
         end
     end
 
-    // 4. Instantiation
     localparam [CORE_WIDTH-1:0] QUARTER = {3'b001, {(CORE_WIDTH-3){1'b0}}};  // 0.25 in Q1.39
     wire signed [CORE_WIDTH-1:0] x_initial = is_zero ? {CORE_WIDTH{1'b0}} : (a_norm + QUARTER);
     wire signed [CORE_WIDTH-1:0] y_initial = is_zero ? {CORE_WIDTH{1'b0}} : (a_norm - QUARTER);
 
+    // x_final < 2^38: only [37:0] is used
+    /* verilator lint_off UNUSEDSIGNAL */
     wire signed [CORE_WIDTH-1:0] x_final;
+    /* verilator lint_on UNUSEDSIGNAL */
     wire core_valid;
     wire core_out_ready;
 
@@ -121,7 +97,7 @@ module cordic_sqrt_wrapper (
         .phase_width(PHASE_WIDTH),
         .n_iterations(N_ITER),
         .iter_width(ITER_WIDTH),
-        .guard_bits(0)              // 40-bit datapath already has ample LSBs
+        .guard_bits(0)              // 40 bits are already enough
     ) core (
         .aclk(clk),
         .resetn(resetn),
@@ -141,44 +117,79 @@ module cordic_sqrt_wrapper (
         .output_ready(core_out_ready)
     );
 
-    // 5. Post scale outputs
-    //   x_final ≈ K_h · √a · 2^39   (positive, < 2^38)
-    //   root    = √a · 2^e · 2^16 = x_final · INV_KH · 2^(e + 16 − 39 − 32)
-    //           = (x_final · INV_KH) >> (55 − e)
-    // Rounded to nearest by adding half an output LSB before the shift.
-    localparam PW = CORE_WIDTH + 34;
+    // ── Post-scale pipeline: root = (x_final · INV_KH) >> (55 − e) ──
+    //   S1 capture   S2 partial products (DSP)   S3 sum   S4 round   S5 shift,
+    //   saturate → output register.
+    // All stages advance together when the output register is free, so no
+    // result is dropped or duplicated; e and is_zero travel with the data.
+    localparam XW = 38;          // significant bits of x_final
+    localparam PW = XW + 34;     // product width
 
-    wire [PW-1:0] x_mult      = {{(PW-CORE_WIDTH){1'b0}}, x_final} * {{(PW-34){1'b0}}, INV_KH};
-    wire [5:0]    post_shift  = 6'd55 - {1'b0, e_reg};
-    wire [PW-1:0] round_half  = {{(PW-1){1'b0}}, 1'b1} << (post_shift - 6'd1);
-    wire [PW-1:0] x_scaled    = (x_mult + round_half) >> post_shift;
+    reg              v1, v2, v3, v4;
+    reg              root_valid;
+    reg  [31:0]      root_reg;
 
-    // Saturate (only reachable for rad close to 2^32)
-    wire          overflow    = |x_scaled[PW-1:32];
-    wire [31:0]   root_sat    = overflow ? 32'hFFFF_FFFF : x_scaled[31:0];
+    wire advance = !root_valid || output_ready;
+    assign core_out_ready = advance;
+    wire core_fire = core_valid && advance;
 
-    wire [31:0]   root_next   = is_zero_reg ? 32'd0 : root_sat;
+    // S1
+    reg  [XW-1:0]    x1;
+    reg  [4:0]       e1;
+    reg              z1;
+    // S2
+    reg  [17+34-1:0] p_lo2;
+    reg  [21+34-1:0] p_hi2;
+    reg  [4:0]       e2;
+    reg              z2;
+    // S3
+    reg  [PW-1:0]    prod3;
+    reg  [5:0]       sh3;
+    reg              z3;
+    // S4
+    reg  [PW-1:0]    rnd4;
+    reg  [5:0]       sh4;
+    reg              z4;
 
-    // 6. Output register (one-entry buffer with valid/ready)
-    //   The core result is moved into the register when it is empty or is
-    //   being emptied in this same cycle, so back-to-back results lose no
-    //   cycle. e_reg / is_zero_reg still belong to this result here: the core
-    //   only accepts a new input after this transfer.
-    reg [31:0] root_reg;
-    reg        root_valid;
-
-    assign core_out_ready = !root_valid || output_ready;
-    wire   core_fire      = core_valid && core_out_ready;
+    /* verilator lint_off UNUSEDSIGNAL */
+    wire [PW-1:0]    scaled = rnd4 >> sh4;    // < 2^34
+    /* verilator lint_on UNUSEDSIGNAL */
+    wire             overflow = |scaled[33:32];  // rad close to 2^32
 
     always @(posedge clk) begin
         if (!resetn) begin
+            v1 <= 1'b0;  v2 <= 1'b0;  v3 <= 1'b0;  v4 <= 1'b0;
+            root_valid <= 1'b0;
             root_reg   <= 32'd0;
-            root_valid <= 1'b0;
-        end else if (core_fire) begin
-            root_reg   <= root_next;
-            root_valid <= 1'b1;
-        end else if (output_ready) begin
-            root_valid <= 1'b0;
+            x1 <= 0;  e1 <= 0;  z1 <= 0;
+            p_lo2 <= 0;  p_hi2 <= 0;  e2 <= 0;  z2 <= 0;
+            prod3 <= 0;  sh3 <= 0;  z3 <= 0;
+            rnd4  <= 0;  sh4 <= 0;  z4 <= 0;
+        end else if (advance) begin
+            // S1
+            v1 <= core_fire;
+            x1 <= x_final[XW-1:0];
+            e1 <= e_reg;
+            z1 <= is_zero_reg;
+            // S2
+            v2    <= v1;
+            p_lo2 <= x1[16:0]    * INV_KH;
+            p_hi2 <= x1[XW-1:17] * INV_KH;
+            e2    <= e1;
+            z2    <= z1;
+            // S3
+            v3    <= v2;
+            prod3 <= {{(PW-51){1'b0}}, p_lo2} + {p_hi2, 17'd0};
+            sh3   <= 6'd55 - {1'b0, e2};
+            z3    <= z2;
+            // S4
+            v4    <= v3;
+            rnd4  <= prod3 + ({{(PW-1){1'b0}}, 1'b1} << (sh3 - 6'd1));
+            sh4   <= sh3;
+            z4    <= z3;
+            // S5
+            root_valid <= v4;
+            root_reg   <= z4 ? 32'd0 : (overflow ? 32'hFFFF_FFFF : scaled[31:0]);
         end
     end
 
