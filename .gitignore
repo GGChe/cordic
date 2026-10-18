@@ -3,7 +3,18 @@
 *.out
 *.log
 *.vcd
+*.fst
 *.fsdb
+
+# Cocotb results
+results*.xml
+
+# LaTeX build products (resources/notes.tex)
+*.aux
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.toc
 
 # Layout/Extraction intermediate files
 *.ext
@@ -28,4 +39,3 @@ tb/cocotb/sim_build/*
 Thumbs.db
 __pycache__/
 .venv/
-poetry.lock

@@ -27,17 +27,26 @@
 //   └─────────────────────────────────────────────────────┘
 //
 // Parameters:
-//   INOUT_WIDTH       — data path bit-width (default 16, Q1.15)
-//   PHASE_WIDTH       — phase accumulator bit-width (default 18)
-//   CORDIC_NITER      — number of CORDIC iterations (default 16)
+//   INOUT_WIDTH        — data path bit-width (default 16, Q1.15)
+//   PHASE_WIDTH        — phase bit-width at the ports (default 18, pi = 2^17)
+//   CORDIC_NITER       — number of CORDIC iterations (default 16, >= 2)
 //   CORDIC_NITER_WIDTH — ceil(log2(CORDIC_NITER)) (default 4)
+//   GUARD_BITS         — extra fractional bits on x / y (default 4)
+//   PHASE_GUARD_BITS   — extra fractional bits on the internal phase
+//                        (default 4); the atan LUT is generated at
+//                        PHASE_WIDTH + PHASE_GUARD_BITS bits (max 31)
+//   PHASE_OUTPUT       — 1: residual-phase master channel enabled (default)
+//                        0: channel disabled, m_axis_phase_tready ignored
 // =============================================================================
 
 module cordic_top #(
-  parameter INOUT_WIDTH       = 16,
-  parameter PHASE_WIDTH       = 18,
-  parameter CORDIC_NITER      = 16,
-  parameter CORDIC_NITER_WIDTH = 4
+  parameter INOUT_WIDTH        = 16,
+  parameter PHASE_WIDTH        = 18,
+  parameter CORDIC_NITER       = 16,
+  parameter CORDIC_NITER_WIDTH = 4,
+  parameter GUARD_BITS         = 4,
+  parameter PHASE_GUARD_BITS   = 4,
+  parameter PHASE_OUTPUT       = 1
 )(
   input aclk,
   input resetn,
@@ -72,14 +81,16 @@ module cordic_top #(
   // -------------------------------------------------------------------------
   // Internal wires connecting the CORDIC core to the atan LUT
   // -------------------------------------------------------------------------
+  localparam LUT_WIDTH = PHASE_WIDTH + PHASE_GUARD_BITS;
+
   wire [CORDIC_NITER_WIDTH-1:0]  lut_address;
-  wire signed [PHASE_WIDTH-1:0]  lut_data;
+  wire signed [LUT_WIDTH-1:0]    lut_data;
 
   // -------------------------------------------------------------------------
   // Atan Look-Up Table (combinational ROM)
   // -------------------------------------------------------------------------
   atan_lut #(
-    .PHASE_WIDTH (PHASE_WIDTH),
+    .PHASE_WIDTH (LUT_WIDTH),
     .N_ENTRIES   (CORDIC_NITER),
     .ADDR_WIDTH  (CORDIC_NITER_WIDTH)
   ) u_atan_lut (
@@ -94,7 +105,10 @@ module cordic_top #(
     .inout_width       (INOUT_WIDTH),
     .phase_width       (PHASE_WIDTH),
     .cordic_niter      (CORDIC_NITER),
-    .cordic_niter_width(CORDIC_NITER_WIDTH)
+    .cordic_niter_width(CORDIC_NITER_WIDTH),
+    .guard_bits        (GUARD_BITS),
+    .phase_guard_bits  (PHASE_GUARD_BITS),
+    .phase_output      (PHASE_OUTPUT)
   ) u_cordic (
     .aclk    (aclk),
     .resetn  (resetn),

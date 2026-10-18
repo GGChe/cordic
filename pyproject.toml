@@ -1,27 +1,43 @@
 [tool.poetry]
 name = "cordic"
 version = "0.1.0"
-description = "Iterative and Pipelined CORDIC implementation with RTL verification"
+description = "Iterative (word-serial) CORDIC implementations with RTL verification"
 authors = ["GGChe <ggche@users.noreply.github.com>"]
 license = "MIT"
 readme = "README.md"
 package-mode = false
 
+# Core: everything `make test-cocotb` needs
 [tool.poetry.dependencies]
 python = "^3.12"
-numpy = "^2.4.0"
-scipy = "^1.16.0"
 cocotb = "^1.9.0"
-plotly = "^6.5.0"
-matplotlib = "^3.8.0"
-librelane = "^2.4.12"
-klayout = "0.30.6"
-jupyter = "^1.1.1"
-ipykernel = "^7.2.0"
+numpy = "^2.4.0"
 
 [tool.poetry.group.dev.dependencies]
 # Useful but optional
 pytest = "^8.0"
+
+# Exploration notebook (notebooks/cordic_exploration.ipynb)
+#   poetry install --with notebook
+[tool.poetry.group.notebook]
+optional = true
+
+[tool.poetry.group.notebook.dependencies]
+scipy = "^1.16.0"
+plotly = "^6.5.0"
+matplotlib = "^3.8.0"
+jupyter = "^1.1.1"
+ipykernel = "^7.2.0"
+nbstripout = "^0.8.0"
+
+# Physical design (make librelane / view-openroad)
+#   poetry install --with pnr
+[tool.poetry.group.pnr]
+optional = true
+
+[tool.poetry.group.pnr.dependencies]
+librelane = "^2.4.12"
+klayout = "0.30.6"
 
 [build-system]
 requires = ["poetry-core>=1.8.0"]
