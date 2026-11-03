@@ -31,7 +31,7 @@ P_SQRT_W = -Ptb_cordic_sqrt.data_width=24 -Ptb_cordic_sqrt.phase_width=26 \
         test-verilog-wrapper test-params test-all test-cocotb test-cocotb-top \
         test-cocotb-sqrt test-axi redpitaya lint luts check-luts synth view-cocotb view-verilog view-verilog-sqrt \
         view-verilog-top view-verilog-wrapper clean setup setup-all strip-notebook \
-        librelane view-openroad
+        librelane librelane-report view-openroad
 
 help:  ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
@@ -128,32 +128,24 @@ view-verilog-wrapper: test-verilog-wrapper  ## View Verilog sqrt wrapper testben
 strip-notebook:  ## Remove outputs from the notebook before committing (needs: make setup-all)
 	poetry run nbstripout notebooks/*.ipynb
 
-# ── Physical design (LibreLane) — requires a librelane/ configuration ──
-librelane:  ## Run full LibreLane flow (needs librelane/run_librelane.py)
-	@if [ ! -f librelane/run_librelane.py ]; then \
-		echo "librelane/run_librelane.py not found — add a LibreLane configuration first."; \
-		exit 1; \
-	fi
-	cd librelane && python3 run_librelane.py
+# ── Physical design (LibreLane, sky130A) ──
+# Runs in the LibreLane Nix shell; PDK installed with ciel under PDK_ROOT.
+LIBRELANE_NIX ?= $(HOME)/librelane/shell.nix
+PDK_ROOT      ?= $(HOME)/.ciel
+LL_RUN         = $$(ls -td librelane/runs/*/ 2>/dev/null | head -n 1)
 
-# View synthesized/routed model in OpenROAD
-view-openroad:  ## View synthesized/routed model in OpenROAD
-	@echo "Finding latest run..."
-	@LATEST_RUN=$$(ls -td librelane/runs/RUN_* 2>/dev/null | head -n 1); \
-	if [ -z "$$LATEST_RUN" ]; then \
-		echo "No runs found in librelane/runs/"; \
-		exit 1; \
-	fi; \
-	echo "Using run: $$LATEST_RUN"; \
-	LATEST_ODB=$$(find $$LATEST_RUN -name "*.odb" | sort | tail -n 1); \
-	if [ -z "$$LATEST_ODB" ]; then \
-		echo "No .odb files found in $$LATEST_RUN"; \
-		exit 1; \
-	fi; \
-	echo "Opening $$LATEST_ODB in OpenROAD..."; \
-	echo "read_db $$LATEST_ODB" > view.tcl; \
-	openroad -gui view.tcl; \
-	rm view.tcl
+librelane:  ## Run the LibreLane Classic flow (RTL → GDS) on cordic_top
+	cd librelane && nix-shell $(LIBRELANE_NIX) --run "librelane --pdk-root $(PDK_ROOT) config.json"
+
+librelane-report:  ## Summarise the latest LibreLane run (timing, area, DRC/LVS)
+	@RUN=$(LL_RUN); [ -n "$$RUN" ] || { echo "No runs in librelane/runs/"; exit 1; }; \
+	python3 librelane/report.py "$$RUN"
+
+view-openroad:  ## Open the latest routed layout in the OpenROAD GUI
+	@RUN=$(LL_RUN); ODB=$$(ls $$RUN/final/odb/*.odb 2>/dev/null | head -n 1); \
+	[ -n "$$ODB" ] || { echo "No final .odb found (run make librelane)"; exit 1; }; \
+	echo "read_db $$ODB" > /tmp/cordic_view.tcl; \
+	nix-shell $(LIBRELANE_NIX) --run "openroad -gui /tmp/cordic_view.tcl"
 
 clean:  ## Remove simulation build products and waveforms
 	rm -rf sim_build __pycache__ .pytest_cache

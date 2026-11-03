@@ -33,6 +33,7 @@ In Vectoring Mode, the vector's y-coordinate ($Y$) is iteratively driven to zero
 | `tb/verilog/`, `tb/cocotb/` | Self-checking Verilog testbenches and cocotb suites |
 | `scripts/` | `cordic.py` (floating-point reference model), `gen_luts.py` (LUT tables) |
 | `fpga/redpitaya/` | Red Pitaya integration: AXI4-Lite registers, block design, Vivado build, on-board test and notebook |
+| `librelane/` | ASIC flow (LibreLane, sky130A): configuration, run report and layout image |
 | `notebooks/` | Exploration notebook and the interactive iteration explorer |
 | `resources/` | Figures and LaTeX notes |
 
@@ -44,7 +45,7 @@ This repository contains iterative (word-serial, one micro-rotation per clock) V
   * Accepts the full angle range $[-\pi, \pi)$: angles beyond $\pm 90°$ are folded by a $\pi$ pre-rotation, since plain CORDIC only converges up to about $\pm 99.9°$.
   * Carries 2 extra integer bits and `guard_bits` (default 4) extra fractional bits on x/y, plus `phase_guard_bits` (default 4) extra bits on the internal phase accumulator. Outputs are rounded to nearest and saturated, so a result of exactly $+1.0$ clips to `32767` instead of wrapping. With the defaults the error is within 1 LSB.
   * The first micro-rotation is done in the input-handshake cycle, and a new input is accepted in the same cycle in which the previous result is taken, so it sustains one result every 16 cycles.
-  * The outputs are computed from the internal registers: the last micro-rotation is a shift by a constant, followed by rounding. This keeps the input path (quadrant fold and capture mux) out of the output path, so the critical path is one micro-rotation and the core closes timing at 125 MHz on a Zynq-7000.
+  * Neither end of the datapath goes through the barrel shifter. Micro-rotation 0 is computed straight from the folded input (shift 0), and the last one from the registers with a constant shift, followed by rounding. The only critical path is therefore one register-to-register micro-rotation. The core closes timing at 125 MHz on a Zynq-7000 and at 58.8 MHz in sky130 (worst corner).
   * The `phase` master channel returns the **residual** angle (≈ 0), useful for verification. Set `phase_output = 0` (`PHASE_OUTPUT` on `cordic_top`) if you do not consume it: the channel then never raises `tvalid` and `m_axis_phase_tready` is ignored. With it enabled, the core waits until the phase beat has been accepted too.
   * Output gain is $K \approx 1.6468$; pre-scale the input by $1/K$ (`19898` in Q1.15) to get $\cos/\sin$ directly.
 * **`src/cordic_sqrt.v`**: Hyperbolic CORDIC core (Vectoring Mode) for fractional square roots, $a \in (0.03, 0.75)$. Output is $K_h \cdot \sqrt{a}$ with $K_h \approx 0.8282$; `z_final` is $\operatorname{atanh}(y_0/x_0)$ in Q2.(phase_width−2) (1.0 = $2^{16}$ by default), so the angle reached at $a = 0.03$ ($\approx -1.06$) does not wrap. The iteration count, datapath width and guard bits are parameters.
@@ -144,6 +145,39 @@ make plots      # run the notebook on the board and fetch the plots into out/plo
 
 These targets need SSH key access to the board, set up once with `ssh-copy-id root@<board>`. The default address is `RP_HOST=192.168.1.145`.
 
-**Interactive notebook.** `make notebook` copies `fpga/redpitaya/sw/cordic_explorer.ipynb` to the board's JupyterLab, available at `http://<board>:8888/jlab/lab/tree/cordic/cordic_explorer.ipynb`. Red Pitaya serves JupyterLab under `/jlab`. The notebook reloads the bitstream before touching the bus, redraws these plots live, and has sliders that rotate a vector on the FPGA.
+**Interactive notebook.** `make notebook` copies `fpga/redpitaya/sw/cordic_explorer.ipynb` to the board's JupyterLab, available at `http://<board>:8888/jlab/lab/tree/cordic/cordic_explorer.ipynb`. Red Pitaya serves JupyterLab under `/jlab`. The notebook reloads the bitstream before touching the bus, redraws the hardware plots live, and has sliders that rotate a vector on the FPGA. Measured results and plots are in [fpga/redpitaya/README.md](fpga/redpitaya/README.md#results-on-hardware).
 
 **Before loading the bitstream, close the Red Pitaya web interface in your browser.** The web server reads the FPGA registers continuously, and a read that lands during reprogramming hangs the board. A GP0 access with no design loaded hangs it too. Details are in [fpga/redpitaya/README.md](fpga/redpitaya/README.md#notes).
+
+## ASIC flow (LibreLane, sky130)
+
+`librelane/config.json` takes `cordic_top` from RTL to GDS with the LibreLane **Classic** flow on SkyWater **sky130A** (`sky130_fd_sc_hd`). The flow includes synthesis, place and route, CTS, parasitic extraction, multi-corner STA, DRC (Magic and KLayout), LVS and antenna checks.
+
+```bash
+make librelane         # run the flow in the LibreLane Nix shell → librelane/runs/<tag>/final/
+make librelane-report  # timing per corner, area, power and sign-off checks of the latest run
+make view-openroad     # open the routed layout in the OpenROAD GUI
+```
+
+It needs the LibreLane Nix shell (`LIBRELANE_NIX`, default `~/librelane/shell.nix`) and the sky130 PDK installed with `ciel` under `PDK_ROOT` (default `~/.ciel`). Both can be overridden on the command line.
+
+### Results (LibreLane 2.4.10, clock 17 ns)
+
+| Check | Result |
+|---|---|
+| Setup slack | tt +7.95 ns · ss +1.84 ns · worst (max_ss, 100 °C, 1.60 V) **+1.71 ns** · ff +8.71 ns |
+| Max frequency | ≈ 65 MHz worst corner · ≈ 110 MHz typical |
+| Hold slack | ≥ +0.11 ns (all corners) |
+| Routing DRC, Magic DRC, KLayout DRC, LVS, antenna | 0 violations |
+| Max slew, max capacitance | 0 violations |
+| Area | 3317 cells, 20 485 µm² cell area, 0.066 mm² die (35.7 % utilisation) |
+| Power | 1.73 mW (typical corner) |
+
+![cordic_top layout in sky130](librelane/docs/cordic_top_layout.png)
+
+### Configuration choices
+
+- **17 ns clock.** The critical path is one micro-rotation: the iteration counter drives the barrel-shifter selects, then a 22-bit adder. In the slow corner it needs about 15.3 ns.
+- **Post-GRT design repair and timing repair are enabled** (`RUN_POST_GRT_DESIGN_REPAIR`, `RUN_POST_GRT_RESIZER_TIMING`). Without them, slew is only repaired with estimated parasitics, and the high-fanout shifter decoders violate after routing.
+- **Diodes only on nets longer than 200 µm** (`HEURISTIC_ANTENNA_THRESHOLD`), after 10 antenna-repair iterations in global routing. Diodes on every long net fixed the antenna violations but added about 1000 cells and caused new slew violations.
+- **Transition limit 1.0 ns and capacitance limit 0.25 pF**, instead of LibreLane's 0.75 ns and 0.2 pF. The cells' library limits are 1.5 ns and, for the clock root `clkbuf_16`, 1.0 pF. The defaults only failed by 0.04 ns, and by 0.03 pF on the clock root buffer.

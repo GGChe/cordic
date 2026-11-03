@@ -126,23 +126,25 @@ module cordic #(
   wire signed [IW-1:0]  y_in_fold = quadrant_fold ? -y_in_ext : y_in_ext;
   wire signed [PIW-1:0] z_in_fold = quadrant_fold ? {~z_in_ext[PIW-1], z_in_ext[PIW-2:0]} : z_in_ext;
 
-  // ── Micro-rotation ──
-  // Outside ROTATE the datapath works on the folded input with iteration = 0,
-  // so micro-rotation 0 happens in the input-handshake cycle.
-  wire start = (cordic_state != ROTATE);
+  // ── Micro-rotation 0, in the input-handshake cycle ──
+  // The shift is 0 here, so no barrel shifter sits on the input path
+  // (iteration = 0 outside ROTATE, so atan_lut_data = atan(1)).
+  wire first_neg = z_in_fold[PIW-1];
 
-  wire signed [IW-1:0]  x_cur = start ? x_in_fold : x_tdata_temp;
-  wire signed [IW-1:0]  y_cur = start ? y_in_fold : y_tdata_temp;
-  wire signed [PIW-1:0] z_cur = start ? z_in_fold : phase_tdata_temp;
+  wire signed [IW-1:0]  x_first     = first_neg ? (x_in_fold + y_in_fold) : (x_in_fold - y_in_fold);
+  wire signed [IW-1:0]  y_first     = first_neg ? (y_in_fold - x_in_fold) : (y_in_fold + x_in_fold);
+  wire signed [PIW-1:0] phase_first = first_neg ? (z_in_fold + atan_lut_data) : (z_in_fold - atan_lut_data);
 
-  wire phase_neg = z_cur[PIW-1];
+  // ── Micro-rotations 1 .. cordic_niter-2, from the registers ──
+  wire phase_neg = phase_tdata_temp[PIW-1];
 
-  wire signed [IW-1:0] x_shifted = x_cur >>> iteration;
-  wire signed [IW-1:0] y_shifted = y_cur >>> iteration;
+  wire signed [IW-1:0] x_shifted = x_tdata_temp >>> iteration;
+  wire signed [IW-1:0] y_shifted = y_tdata_temp >>> iteration;
 
-  wire signed [IW-1:0]  x_next     = phase_neg ? (x_cur + y_shifted) : (x_cur - y_shifted);
-  wire signed [IW-1:0]  y_next     = phase_neg ? (y_cur - x_shifted) : (y_cur + x_shifted);
-  wire signed [PIW-1:0] phase_next = phase_neg ? (z_cur + atan_lut_data) : (z_cur - atan_lut_data);
+  wire signed [IW-1:0]  x_next     = phase_neg ? (x_tdata_temp + y_shifted) : (x_tdata_temp - y_shifted);
+  wire signed [IW-1:0]  y_next     = phase_neg ? (y_tdata_temp - x_shifted) : (y_tdata_temp + x_shifted);
+  wire signed [PIW-1:0] phase_next = phase_neg ? (phase_tdata_temp + atan_lut_data)
+                                               : (phase_tdata_temp - atan_lut_data);
 
   // ── Output: round to nearest, drop the guard bits, saturate ──
   localparam signed [IW-1:0]          ROUND_HALF = 1 << (guard_bits-1);
@@ -164,9 +166,9 @@ module cordic #(
     end
   endfunction
 
-  // The last micro-rotation is recomputed from the registers alone (the shift
-  // by LAST_ITER is wiring). It equals x/y/phase_next in that cycle, but keeps
-  // the input fold and capture mux out of the output timing path.
+  // The last micro-rotation feeds the outputs; its shift by the constant
+  // LAST_ITER is wiring, which keeps the barrel shifter and the rounding out of
+  // one combined path.
   wire phase_neg_last = phase_tdata_temp[PIW-1];
 
   wire signed [IW-1:0]  x_shifted_last = x_tdata_temp >>> LAST_ITER_INT;
@@ -210,9 +212,9 @@ module cordic #(
         // input (and do micro-rotation 0) as soon as the core is free.
         IDLE, OUTPUT: begin
           if (in_fire) begin
-            x_tdata_temp <= x_next;
-            y_tdata_temp <= y_next;
-            phase_tdata_temp <= phase_next;
+            x_tdata_temp <= x_first;
+            y_tdata_temp <= y_first;
+            phase_tdata_temp <= phase_first;
             iteration <= ITER_ONE;
             cordic_state <= ROTATE;
           end else if (out_done) begin

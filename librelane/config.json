@@ -1,0 +1,31 @@
+{
+    "DESIGN_NAME": "cordic_top",
+    "VERILOG_FILES": [
+        "dir::../src/atan_lut.v",
+        "dir::../src/cordic.v",
+        "dir::../src/cordic_top.v"
+    ],
+    "CLOCK_PORT": "aclk",
+    "CLOCK_PERIOD": 17.0,
+    "PDK": "sky130A",
+    "STD_CELL_LIBRARY": "sky130_fd_sc_hd",
+    "FP_CORE_UTIL": 35,
+    "PL_TARGET_DENSITY_PCT": 55,
+    "RUN_ANTENNA_REPAIR": true,
+    "GRT_REPAIR_ANTENNAS": true,
+    "PL_RESIZER_TIMING_OPTIMIZATION": true,
+    "GLB_RESIZER_TIMING_OPTIMIZATION": true,
+    "ERROR_ON_SYNTH_CHECKS": true,
+    "DESIGN_REPAIR_MAX_SLEW_PCT": 40,
+    "DESIGN_REPAIR_MAX_CAP_PCT": 30,
+    "GRT_DESIGN_REPAIR_MAX_SLEW_PCT": 40,
+    "GRT_DESIGN_REPAIR_MAX_CAP_PCT": 30,
+    "RUN_POST_GRT_DESIGN_REPAIR": true,
+    "RUN_POST_GRT_RESIZER_TIMING": true,
+    "GRT_ANTENNA_ITERS": 10,
+    "GRT_ANTENNA_MARGIN": 20,
+    "RUN_HEURISTIC_DIODE_INSERTION": true,
+    "HEURISTIC_ANTENNA_THRESHOLD": 200,
+    "MAX_TRANSITION_CONSTRAINT": 1.0,
+    "MAX_CAPACITANCE_CONSTRAINT": 0.25
+}

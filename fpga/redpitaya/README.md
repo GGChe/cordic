@@ -16,7 +16,7 @@ The test script on the board writes inputs through registers, starts each operat
 
 ## Results on hardware
 
-Measured on a STEMlab 125-14 PRO Gen 2 (Zynq-7020, Red Pitaya OS 3.00), built with Vivado 2025.1. Timing closes at 125 MHz with WNS = +0.221 ns.
+Measured on a STEMlab 125-14 PRO Gen 2 (Zynq-7020, Red Pitaya OS 3.00), built with Vivado 2025.1. With the current RTL, timing closes at 125 MHz with WNS = +0.251 ns and WHS = +0.101 ns. The accuracy and throughput figures were measured with the previous build, which is functionally identical: the later RTL changes only restructure the input and output paths.
 
 | Check | Result |
 |---|---|
@@ -26,7 +26,7 @@ Measured on a STEMlab 125-14 PRO Gen 2 (Zynq-7020, Red Pitaya OS 3.00), built wi
 | Square-root throughput | 20.00 cycles/result → 6.25 M results/s |
 | Latency of one operation | circular 17 cycles, square root 25 cycles (from the `C_CTRL` / `S_CTRL` write to the result) |
 | FCLK0 | 125.00 MHz (measured) |
-| Utilization | 2009 LUTs (3.8 %), 1682 FFs (1.6 %), 4 DSP48 (1.8 %), no BRAM |
+| Utilization | 2118 LUTs (4.0 %), 1716 FFs (1.6 %), 4 DSP48 (1.8 %), no BRAM |
 
 Plots produced by the notebook (`make plots`). Every point was computed by the FPGA, with the exact math drawn underneath:
 

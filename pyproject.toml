@@ -30,7 +30,8 @@ jupyter = "^1.1.1"
 ipykernel = "^7.2.0"
 nbstripout = "^0.8.0"
 
-# Physical design (make librelane / view-openroad)
+# LibreLane Python API only. The flow itself (make librelane) runs in the
+# LibreLane Nix shell, which also provides OpenROAD, Magic, Netgen and KLayout.
 #   poetry install --with pnr
 [tool.poetry.group.pnr]
 optional = true
