@@ -16,7 +16,7 @@ The test script on the board writes inputs through registers, starts each operat
 
 ## Results on hardware
 
-Measured on a STEMlab 125-14 PRO Gen 2 (Zynq-7020, Red Pitaya OS 3.00), built with Vivado 2025.1. With the current RTL, timing closes at 125 MHz with WNS = +0.251 ns and WHS = +0.101 ns. The accuracy and throughput figures were measured with the previous build, which is functionally identical: the later RTL changes only restructure the input and output paths.
+Measured on a STEMlab 125-14 PRO Gen 2 (Zynq-7020, Red Pitaya OS 3.00), built with Vivado 2025.1. Timing closes at 125 MHz with WNS = +0.251 ns and WHS = +0.101 ns.
 
 | Check | Result |
 |---|---|
@@ -93,7 +93,7 @@ LEDs: [0] heartbeat (about 1 Hz), [1] circular done, [2] sqrt done, [3] busy, [7
 The make targets use SSH with a key, so they never ask for a password. Copy your key to the board once:
 
 ```bash
-ssh-copy-id root@192.168.1.145
+ssh-copy-id root@rp-f0f145.local
 ```
 
 **Build, load, and test**
@@ -140,7 +140,7 @@ monitor 0x40000008 15                               # SCRATCH → LED[7:4] on
 
 | Variable | Default |
 |---|---|
-| `RP_HOST` | `192.168.1.145` |
+| `RP_HOST` | `rp-f0f145.local` |
 | `RP_USER` | `root` |
 | `PART` | `xc7z020clg400-1` |
 | `JOBS` | `8` |

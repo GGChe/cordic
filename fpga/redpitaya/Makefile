@@ -1,7 +1,7 @@
 # CORDIC hardware test on the Red Pitaya. `make help` lists the targets.
 # Board access is over SSH with a key (once: ssh-copy-id root@<board>).
 
-RP_HOST ?= 192.168.1.145
+RP_HOST ?= rp-f0f145.local
 RP_USER ?= root
 RP_DIR  ?= /root/cordic
 PART    ?= xc7z020clg400-1

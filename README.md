@@ -143,7 +143,7 @@ make hw         # copy to the board over SSH, load it with fpgautil, run the har
 make plots      # run the notebook on the board and fetch the plots into out/plots/
 ```
 
-These targets need SSH key access to the board, set up once with `ssh-copy-id root@<board>`. The default address is `RP_HOST=192.168.1.145`.
+These targets need SSH key access to the board, set up once with `ssh-copy-id root@<board>`. The default address is `RP_HOST=rp-f0f145.local`.
 
 **Interactive notebook.** `make notebook` copies `fpga/redpitaya/sw/cordic_explorer.ipynb` to the board's JupyterLab, available at `http://<board>:8888/jlab/lab/tree/cordic/cordic_explorer.ipynb`. Red Pitaya serves JupyterLab under `/jlab`. The notebook reloads the bitstream before touching the bus, redraws the hardware plots live, and has sliders that rotate a vector on the FPGA. Measured results and plots are in [fpga/redpitaya/README.md](fpga/redpitaya/README.md#results-on-hardware).
 
